@@ -114,48 +114,19 @@ export function AttendanceProvider({ children }) {
   }, [refreshData]);
 
   // Authentication Helpers
-  const login = async (roleOrCredentials, userOverride = null) => {
-    // 1. Direct user override if supplied
-    if (userOverride?.token && userOverride?.user) {
-      localStorage.setItem('attendtrack_token', userOverride.token);
-      setCurrentUser(userOverride.user);
-      await refreshData(userOverride.user);
-      return userOverride.user;
+  const login = async (credentials) => {
+    if (!credentials || !credentials.email || !credentials.password) {
+      throw new Error('Please enter email/student ID and password');
     }
 
-    // 2. Object with email & password passed
-    if (typeof roleOrCredentials === 'object' && roleOrCredentials.email) {
-      const res = await authApi.login(roleOrCredentials);
-      if (res.data?.success) {
-        localStorage.setItem('attendtrack_token', res.data.token);
-        setCurrentUser(res.data.user);
-        await refreshData(res.data.user);
-        return res.data.user;
-      }
-      throw new Error(res.data?.message || 'Login failed');
-    }
-
-    // 3. Role name string passed (e.g. from quick persona switcher)
-    const roleKey = typeof roleOrCredentials === 'string' ? roleOrCredentials : 'admin';
-    let creds = { email: 'admin@college.edu', password: 'admin123', role: 'admin' };
-
-    if (roleKey === 'teacher' || roleKey === 'teacherSharma') {
-      creds = { email: 'sharma@college.edu', password: 'teacher123', role: 'teacher' };
-    } else if (roleKey === 'teacherMehta') {
-      creds = { email: 'mehta@college.edu', password: 'teacher123', role: 'teacher' };
-    } else if (roleKey === 'student' || roleKey === 'studentAlex') {
-      creds = { email: '101', password: '101', role: 'student' };
-    } else if (roleKey === 'studentRohan') {
-      creds = { email: '102', password: '102', role: 'student' };
-    }
-
-    const res = await authApi.login(creds);
-    if (res.data?.success) {
+    const res = await authApi.login(credentials);
+    if (res.data?.success && res.data.token && res.data.user) {
       localStorage.setItem('attendtrack_token', res.data.token);
       setCurrentUser(res.data.user);
       await refreshData(res.data.user);
       return res.data.user;
     }
+    throw new Error(res.data?.message || 'Login failed');
   };
 
   const logout = () => {
@@ -339,15 +310,37 @@ export function AttendanceProvider({ children }) {
     }
   };
 
-  const importStudentsCSV = async (classId, parsedList) => {
+  const importStudentsCSV = async (classId, parsedList, initialPassword) => {
     try {
-      const res = await usersApi.importCSV(classId, parsedList);
+      const res = await usersApi.importCSV(classId, parsedList, initialPassword);
       // Refresh students list
       const stuRes = await usersApi.getUsers({ role: 'student' });
       setStudents(stuRes.data?.users || []);
       return res.data?.importedCount || parsedList.length;
     } catch (err) {
       console.error('Failed to import CSV:', err);
+      throw err;
+    }
+  };
+
+  // Change Password for logged-in user
+  const changePassword = async (passwordData) => {
+    try {
+      const res = await authApi.changePassword(passwordData);
+      return res.data;
+    } catch (err) {
+      console.error('Failed to change password:', err);
+      throw err;
+    }
+  };
+
+  // Admin Reset Password for student or teacher
+  const resetUserPassword = async (userId, temporaryPassword) => {
+    try {
+      const res = await usersApi.resetPassword(userId, { temporaryPassword });
+      return res.data;
+    } catch (err) {
+      console.error('Failed to reset password:', err);
       throw err;
     }
   };
@@ -656,18 +649,42 @@ export function AttendanceProvider({ children }) {
 
   // Calculate Teacher's assigned classes, subjects, and stats
   const getTeacherData = (teacherId) => {
-    const teacher = teachers.find((t) => t.id === teacherId) || currentUser;
+    const tidStr = String(teacherId || '');
+    const teacher =
+      teachers.find((t) => String(t.id || t._id) === tidStr) || currentUser;
     if (!teacher) return null;
 
-    const teacherAssignments = assignments.filter((a) => a.teacherId === teacherId);
+    const teacherAssignments = assignments.filter((a) => {
+      const aTeacherId = String(a.teacherId?._id || a.teacherId?.id || a.teacherId || '');
+      return aTeacherId === tidStr;
+    });
 
-    const assignedClassIds = [...new Set(teacherAssignments.map((a) => a.classId))];
-    const assignedClasses = classes.filter((c) => assignedClassIds.includes(c.id));
+    const assignedClassIds = [
+      ...new Set(
+        teacherAssignments.map((a) =>
+          String(a.classId?._id || a.classId?.id || a.classId || '')
+        )
+      ),
+    ];
+    const assignedClasses = classes.filter((c) =>
+      assignedClassIds.includes(String(c.id || c._id))
+    );
 
-    const assignedSubjectIds = [...new Set(teacherAssignments.map((a) => a.subjectId))];
-    const assignedSubjects = subjects.filter((s) => assignedSubjectIds.includes(s.id));
+    const assignedSubjectIds = [
+      ...new Set(
+        teacherAssignments.map((a) =>
+          String(a.subjectId?._id || a.subjectId?.id || a.subjectId || '')
+        )
+      ),
+    ];
+    const assignedSubjects = subjects.filter((s) =>
+      assignedSubjectIds.includes(String(s.id || s._id))
+    );
 
-    const teacherSessions = attendanceSessions.filter((s) => s.teacherId === teacherId);
+    const teacherSessions = attendanceSessions.filter((s) => {
+      const sTeacherId = String(s.teacherId?._id || s.teacherId?.id || s.teacherId || '');
+      return sTeacherId === tidStr;
+    });
 
     return {
       teacher,
@@ -752,6 +769,8 @@ export function AttendanceProvider({ children }) {
         saveAttendanceSession,
         updateAttendanceSession,
         updateSettings,
+        changePassword,
+        resetUserPassword,
         getStudentMetrics,
         getClassMetrics,
         getTeacherData,

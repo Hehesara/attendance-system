@@ -14,7 +14,7 @@ export default function AttendanceHistoryView() {
     updateAttendanceSession,
   } = useAttendance();
 
-  const teacherId = currentUser?.id || 'tea-sharma';
+  const teacherId = currentUser?.id || currentUser?._id;
   const teacherData = getTeacherData(teacherId);
 
   const assignedClasses = teacherData?.assignedClasses || [];
@@ -30,9 +30,9 @@ export default function AttendanceHistoryView() {
   const [saveFeedback, setSaveFeedback] = useState(false);
 
   const teacherSessions = attendanceSessions
-    .filter((s) => s.teacherId === teacherId)
-    .filter((s) => selectedClass === 'All' || s.classId === selectedClass)
-    .filter((s) => selectedSubject === 'All' || s.subjectId === selectedSubject)
+    .filter((s) => String(s.teacherId?._id || s.teacherId?.id || s.teacherId || '') === String(teacherId))
+    .filter((s) => selectedClass === 'All' || String(s.classId?._id || s.classId?.id || s.classId || '') === String(selectedClass))
+    .filter((s) => selectedSubject === 'All' || String(s.subjectId?._id || s.subjectId?.id || s.subjectId || '') === String(selectedSubject))
     .filter((s) => !selectedDate || s.date === selectedDate)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 

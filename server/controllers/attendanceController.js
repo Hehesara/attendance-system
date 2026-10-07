@@ -494,7 +494,9 @@ const getReports = async (req, res) => {
     const threshold = await getActiveThreshold();
 
     // Get all students enrolled in this class
-    const students = await User.find({ role: 'student', classId }).sort({ rollNo: 1 });
+    const students = await User.find({ role: 'student', classId })
+      .select('-password')
+      .sort({ rollNo: 1 });
 
     // Filter sessions
     const sessionFilter = { classId };
@@ -585,7 +587,7 @@ const getAdminOverview = async (req, res) => {
       ]);
 
     // Calculate system-wide defaulter rate and average attendance
-    const students = await User.find({ role: 'student' });
+    const students = await User.find({ role: 'student' }).select('-password');
     const allSessions = await AttendanceSession.find();
 
     let defaultersCount = 0;

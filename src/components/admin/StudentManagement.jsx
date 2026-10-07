@@ -1,27 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAttendance } from '../../context/AttendanceContext';
 import Modal from '../common/Modal';
 import {
   Upload,
   Search,
   Filter,
-  Download,
   Trash2,
   Edit2,
   CheckCircle2,
+  AlertCircle,
   Plus,
+  Key,
+  Loader2,
 } from 'lucide-react';
 
 export default function StudentManagement() {
-  const { students, classes, importStudentsCSV, addStudent, updateStudent, deleteStudent } =
-    useAttendance();
+  const {
+    students,
+    classes,
+    importStudentsCSV,
+    addStudent,
+    updateStudent,
+    deleteStudent,
+    resetUserPassword,
+  } = useAttendance();
 
   // CSV Import Modal State
+  const fileInputRef = useRef(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [selectedClassForImport, setSelectedClassForImport] = useState(classes[0]?.id || '');
-  const [csvRawText, setCsvRawText] = useState('');
+  const [csvInitialPassword, setCsvInitialPassword] = useState('');
   const [parsedPreview, setParsedPreview] = useState([]);
   const [importFeedback, setImportFeedback] = useState(null);
+  const [importError, setImportError] = useState(null);
 
   // Manual Add / Edit Modal State
   const [editingStudent, setEditingStudent] = useState(null);
@@ -31,7 +42,16 @@ export default function StudentManagement() {
     name: '',
     email: '',
     classId: classes[0]?.id || '',
+    initialPassword: '',
   });
+  const [manualFormError, setManualFormError] = useState(null);
+
+  // Reset Password State
+  const [resetTargetStudent, setResetTargetStudent] = useState(null);
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [resetFeedback, setResetFeedback] = useState(null);
+  const [resetError, setResetError] = useState(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   // Table Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,8 +60,12 @@ export default function StudentManagement() {
   // Handle CSV file upload
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setParsedPreview([]);
+      return;
+    }
 
+    setImportError(null);
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result;
@@ -49,18 +73,32 @@ export default function StudentManagement() {
         parseCsvContent(content);
       }
     };
+    reader.onerror = () => {
+      setImportError('Failed to read the selected file.');
+    };
     reader.readAsText(file);
+  };
+
+  const handleCloseCsvModal = () => {
+    setIsCsvModalOpen(false);
+    setParsedPreview([]);
+    setCsvInitialPassword('');
+    setImportFeedback(null);
+    setImportError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // Parse CSV string into preview array
   const parseCsvContent = (text) => {
-    setCsvRawText(text);
     const lines = text
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
     if (lines.length < 2) {
       setParsedPreview([]);
+      setImportError('The CSV file must contain a header row and at least one student row.');
       return;
     }
 
@@ -81,47 +119,75 @@ export default function StudentManagement() {
         parsed.push({ rollNo, name, email });
       }
     }
+    if (parsed.length === 0) {
+      setImportError('Could not find valid student rows in the CSV. Expected columns: Roll No, Name, Email.');
+    } else {
+      setImportError(null);
+    }
     setParsedPreview(parsed);
   };
 
-  // Sample CSV template
-  const downloadSampleCsv = () => {
-    const sample = `Roll No,Student Name,Email\n101,Aarav Sharma,aarav.s@college.edu\n102,Diya Patel,diya.p@college.edu\n103,Rohan Verma,rohan.v@college.edu`;
-    const blob = new Blob([sample], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Sample_Student_Roster.csv';
-    a.click();
-  };
-
   // Commit CSV import
-  const handleCommitImport = () => {
+  const handleCommitImport = async () => {
+    setImportError(null);
+    setImportFeedback(null);
     if (!selectedClassForImport || parsedPreview.length === 0) return;
 
-    const count = importStudentsCSV(selectedClassForImport, parsedPreview);
-    const targetClass = classes.find((c) => c.id === selectedClassForImport);
-    setImportFeedback(`Imported ${count} students into ${targetClass?.name}`);
+    if (!csvInitialPassword || csvInitialPassword.length < 6) {
+      setImportError('Initial password for imported students is required (at least 6 characters)');
+      return;
+    }
 
-    setTimeout(() => {
-      setIsCsvModalOpen(false);
-      setParsedPreview([]);
-      setCsvRawText('');
-      setImportFeedback(null);
-    }, 1500);
+    try {
+      const count = await importStudentsCSV(
+        selectedClassForImport,
+        parsedPreview,
+        csvInitialPassword
+      );
+      const targetClass = classes.find((c) => c.id === selectedClassForImport);
+      setImportFeedback(
+        `Imported ${count} students into ${targetClass?.name}. Students should change their password after their first login.`
+      );
+
+      setTimeout(() => {
+        handleCloseCsvModal();
+      }, 2000);
+    } catch (err) {
+      setImportError(err?.response?.data?.message || err?.message || 'Failed to import students');
+    }
   };
 
   // Handle Manual Student Add / Edit
-  const handleStudentFormSubmit = (e) => {
+  const handleStudentFormSubmit = async (e) => {
     e.preventDefault();
+    setManualFormError(null);
     if (!studentForm.name || !studentForm.rollNo) return;
 
-    if (editingStudent) {
-      updateStudent(editingStudent.id, studentForm);
-      setEditingStudent(null);
-    } else {
-      addStudent(studentForm);
-      setIsManualAddOpen(false);
+    try {
+      if (editingStudent) {
+        await updateStudent(editingStudent.id, {
+          rollNo: studentForm.rollNo,
+          name: studentForm.name,
+          email: studentForm.email,
+          classId: studentForm.classId,
+        });
+        setEditingStudent(null);
+      } else {
+        if (!studentForm.initialPassword || studentForm.initialPassword.length < 6) {
+          setManualFormError('Initial password is required (minimum 6 characters)');
+          return;
+        }
+        await addStudent({
+          rollNo: studentForm.rollNo,
+          name: studentForm.name,
+          email: studentForm.email,
+          classId: studentForm.classId,
+          password: studentForm.initialPassword,
+        });
+        setIsManualAddOpen(false);
+      }
+    } catch (err) {
+      setManualFormError(err?.response?.data?.message || err?.message || 'Failed to save student');
     }
   };
 
@@ -132,7 +198,47 @@ export default function StudentManagement() {
       name: st.name,
       email: st.email,
       classId: st.classId,
+      initialPassword: '',
     });
+    setManualFormError(null);
+  };
+
+  const handleOpenReset = (st) => {
+    setResetTargetStudent(st);
+    setTemporaryPassword('');
+    setResetFeedback(null);
+    setResetError(null);
+  };
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    setResetError(null);
+    setResetFeedback(null);
+
+    if (!temporaryPassword || temporaryPassword.length < 6) {
+      setResetError('Temporary password must be at least 6 characters long');
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const res = await resetUserPassword(resetTargetStudent.id, temporaryPassword);
+      setResetFeedback(
+        res?.message ||
+          'Password reset successfully. Give the temporary password to the user securely.'
+      );
+      setTimeout(() => {
+        setResetTargetStudent(null);
+        setTemporaryPassword('');
+        setResetFeedback(null);
+      }, 2500);
+    } catch (err) {
+      setResetError(
+        err?.response?.data?.message || err?.message || 'Failed to reset student password'
+      );
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   // Filtered Students
@@ -247,8 +353,15 @@ export default function StudentManagement() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            onClick={() => handleOpenReset(st)}
+                            className="p-1 text-slate-400 hover:text-amber-600 rounded cursor-pointer"
+                            title="Reset Password"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => openEditStudent(st)}
-                            className="p-1 text-slate-400 hover:text-slate-700 rounded"
+                            className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
                             title="Edit"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -257,7 +370,7 @@ export default function StudentManagement() {
                             onClick={() => {
                               if (confirm(`Remove ${st.name}?`)) deleteStudent(st.id);
                             }}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
                             title="Remove"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -276,26 +389,28 @@ export default function StudentManagement() {
       {/* CSV IMPORT MODAL */}
       <Modal
         isOpen={isCsvModalOpen}
-        onClose={() => {
-          setIsCsvModalOpen(false);
-          setParsedPreview([]);
-          setCsvRawText('');
-          setImportFeedback(null);
-        }}
+        onClose={handleCloseCsvModal}
         title="Import Students CSV"
         maxWidth="max-w-2xl"
       >
         <div className="space-y-4">
           {importFeedback && (
             <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{importFeedback}</span>
+            </div>
+          )}
+
+          {importError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{importError}</span>
             </div>
           )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Select Target Class
+              Select Target Class *
             </label>
             <select
               value={selectedClassForImport}
@@ -310,35 +425,34 @@ export default function StudentManagement() {
             </select>
           </div>
 
-          <div className="border border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50/50">
-            <p className="text-xs text-slate-600 font-medium">Select a CSV file from your computer</p>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Initial Password for Imported Students *
+            </label>
             <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleFileUpload}
-              className="mt-2 text-xs text-slate-500"
+              type="password"
+              required
+              minLength={6}
+              placeholder="e.g. StudentPass@123"
+              value={csvInitialPassword}
+              onChange={(e) => setCsvInitialPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
             />
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={downloadSampleCsv}
-                className="text-xs text-indigo-600 hover:underline flex items-center justify-center gap-1 mx-auto"
-              >
-                <Download className="w-3.5 h-3.5" /> Download Sample CSV Template
-              </button>
-            </div>
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg mt-1 font-medium">
+              Students should change their password after their first login.
+            </p>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Or Paste CSV Text:
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Select CSV File *
             </label>
-            <textarea
-              rows={3}
-              placeholder="Roll No,Student Name,Email&#10;101,Aarav Sharma,aarav.s@college.edu"
-              value={csvRawText}
-              onChange={(e) => parseCsvContent(e.target.value)}
-              className="w-full p-2.5 border border-slate-200 rounded-lg font-mono text-xs bg-white"
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileUpload}
+              className="block w-full text-xs text-slate-600 border border-slate-200 rounded-lg p-2.5 bg-slate-50/50 cursor-pointer"
             />
           </div>
 
@@ -373,11 +487,8 @@ export default function StudentManagement() {
           <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => {
-                setIsCsvModalOpen(false);
-                setParsedPreview([]);
-              }}
-              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+              onClick={handleCloseCsvModal}
+              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
             >
               Cancel
             </button>
@@ -403,10 +514,18 @@ export default function StudentManagement() {
         onClose={() => {
           setIsManualAddOpen(false);
           setEditingStudent(null);
+          setManualFormError(null);
         }}
         title={editingStudent ? `Edit Student: ${editingStudent.name}` : 'Add Student'}
       >
         <form onSubmit={handleStudentFormSubmit} className="space-y-4">
+          {manualFormError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{manualFormError}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Roll No *</label>
@@ -458,22 +577,116 @@ export default function StudentManagement() {
             </select>
           </div>
 
+          {!editingStudent && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Initial Password *
+              </label>
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="Initial password for student login"
+                value={studentForm.initialPassword}
+                onChange={(e) =>
+                  setStudentForm({ ...studentForm, initialPassword: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Minimum 6 characters. Students can change their password after login.
+              </p>
+            </div>
+          )}
+
           <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
             <button
               type="button"
               onClick={() => {
                 setIsManualAddOpen(false);
                 setEditingStudent(null);
+                setManualFormError(null);
               }}
-              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+              className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg cursor-pointer"
             >
               {editingStudent ? 'Save Changes' : 'Add Student'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Admin Reset Password Modal */}
+      <Modal
+        isOpen={!!resetTargetStudent}
+        onClose={() => {
+          setResetTargetStudent(null);
+          setResetFeedback(null);
+          setResetError(null);
+        }}
+        title={`Reset Password: ${resetTargetStudent?.name || ''}`}
+      >
+        <form onSubmit={handleResetSubmit} className="space-y-4">
+          {resetFeedback && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{resetFeedback}</span>
+            </div>
+          )}
+
+          {resetError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
+          <p className="text-xs text-slate-600">
+            Set a temporary password for student <strong>{resetTargetStudent?.name}</strong> (Roll No: {resetTargetStudent?.rollNo}).
+          </p>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              New Temporary Password *
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              placeholder="Enter new temporary password"
+              value={temporaryPassword}
+              onChange={(e) => setTemporaryPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">Minimum 6 characters.</p>
+          </div>
+
+          <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setResetTargetStudent(null)}
+              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isResetting}
+              className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 rounded-lg flex items-center gap-1.5 cursor-pointer"
+            >
+              {isResetting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                'Reset Password'
+              )}
             </button>
           </div>
         </form>

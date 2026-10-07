@@ -16,16 +16,15 @@ const generateToken = (user) => {
 // @access  Public
 const login = async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    const { email, identifier, password, role } = req.body;
+    const cleanIdentifier = String(email || identifier || '').trim();
 
-    if (!email || !password) {
+    if (!cleanIdentifier || !password) {
       return res.status(400).json({
         success: false,
         message: 'Please provide email/roll number and password',
       });
     }
-
-    const cleanIdentifier = String(email).trim();
 
     // Search by email (case-insensitive) or rollNo
     const user = await User.findOne({
@@ -33,7 +32,9 @@ const login = async (req, res) => {
         { email: cleanIdentifier.toLowerCase() },
         { rollNo: cleanIdentifier },
       ],
-    }).populate('classId', 'name department semester academicYear');
+    })
+      .select('+password')
+      .populate('classId', 'name department semester academicYear');
 
     if (!user) {
       return res.status(401).json({
@@ -127,7 +128,68 @@ const getMe = async (req, res) => {
   }
 };
 
+// @desc    Change password for logged-in user
+// @route   PUT /api/auth/change-password
+// @access  Private (All authenticated roles)
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required',
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long',
+      });
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password and confirm password do not match',
+      });
+    }
+
+    // Get user with password
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password does not match',
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Password changed successfully',
+    });
+  } catch (error) {
+    console.error('changePassword error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while changing password',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   login,
   getMe,
+  changePassword,
 };

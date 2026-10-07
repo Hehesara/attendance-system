@@ -5,30 +5,16 @@ import { useAttendance } from '../context/AttendanceContext';
 export default function Login({ onLogin }) {
   const { login } = useAttendance();
   const [role, setRole] = useState('student');
-  const [email, setEmail] = useState('alex.j@college.edu');
-  const [password, setPassword] = useState('101');
-  const [studentPersona, setStudentPersona] = useState('studentAlex');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleRoleChange = (newRole) => {
     setRole(newRole);
     setError(null);
-    if (newRole === 'admin') {
-      setEmail('admin@college.edu');
-      setPassword('admin123');
-    } else if (newRole === 'teacher') {
-      setEmail('sharma@college.edu');
-      setPassword('teacher123');
-    } else if (newRole === 'student') {
-      if (studentPersona === 'studentAlex') {
-        setEmail('alex.j@college.edu');
-        setPassword('101');
-      } else {
-        setEmail('rohan.s@college.edu');
-        setPassword('102');
-      }
-    }
+    setEmail('');
+    setPassword('');
   };
 
   const handleLoginSubmit = async (e) => {
@@ -82,40 +68,6 @@ export default function Login({ onLogin }) {
             </button>
           ))}
         </div>
-
-        {/* Subtle Student Persona Selector */}
-        {role === 'student' && (
-          <div className="flex items-center justify-center gap-4 text-xs text-slate-500 pt-1">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="studentPersona"
-                checked={studentPersona === 'studentAlex'}
-                onChange={() => {
-                  setStudentPersona('studentAlex');
-                  setEmail('alex.j@college.edu');
-                  setPassword('101');
-                }}
-                className="text-indigo-600"
-              />
-              <span>Alex Johnson (Regular)</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="studentPersona"
-                checked={studentPersona === 'studentRohan'}
-                onChange={() => {
-                  setStudentPersona('studentRohan');
-                  setEmail('rohan.s@college.edu');
-                  setPassword('102');
-                }}
-                className="text-indigo-600"
-              />
-              <span>Rohan (Defaulter)</span>
-            </label>
-          </div>
-        )}
 
         {/* Error notification banner */}
         {error && (

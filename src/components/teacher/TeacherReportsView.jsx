@@ -5,7 +5,7 @@ import { Download, Search, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 export default function TeacherReportsView() {
   const { currentUser, getTeacherData, students, attendanceSessions, settings } = useAttendance();
 
-  const teacherId = currentUser?.id || 'tea-sharma';
+  const teacherId = currentUser?.id || currentUser?._id;
   const teacherData = getTeacherData(teacherId);
 
   const assignedClasses = teacherData?.assignedClasses || [];
@@ -21,16 +21,25 @@ export default function TeacherReportsView() {
   const reportRows = [];
 
   students
-    .filter((s) => selectedClassId === 'All' || s.classId === selectedClassId)
-    .filter((s) => assignedClasses.some((c) => c.id === s.classId))
+    .filter((s) => {
+      const sClsId = String(s.classId?._id || s.classId?.id || s.classId || '');
+      const selClsId = String(selectedClassId);
+      return (selClsId === 'All' || sClsId === selClsId) &&
+        assignedClasses.some((c) => String(c.id || c._id) === sClsId);
+    })
     .forEach((st) => {
-      const cls = assignedClasses.find((c) => c.id === st.classId);
+      const sClsId = String(st.classId?._id || st.classId?.id || st.classId || '');
+      const cls = assignedClasses.find((c) => String(c.id || c._id) === sClsId);
 
       const relevantSessions = attendanceSessions.filter(
-        (sess) =>
-          sess.classId === st.classId &&
-          sess.teacherId === teacherId &&
-          (selectedSubjectId === 'All' || sess.subjectId === selectedSubjectId)
+        (sess) => {
+          const sessClsId = String(sess.classId?._id || sess.classId?.id || sess.classId || '');
+          const sessTeaId = String(sess.teacherId?._id || sess.teacherId?.id || sess.teacherId || '');
+          const sessSubId = String(sess.subjectId?._id || sess.subjectId?.id || sess.subjectId || '');
+          return sessClsId === sClsId &&
+            sessTeaId === String(teacherId) &&
+            (selectedSubjectId === 'All' || sessSubId === String(selectedSubjectId));
+        }
       );
 
       let attended = 0;

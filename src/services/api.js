@@ -38,6 +38,7 @@ api.interceptors.response.use(
 export const authApi = {
   login: (credentials) => api.post('/auth/login', credentials),
   getMe: () => api.get('/auth/me'),
+  changePassword: (data) => api.put('/auth/change-password', data),
 };
 
 // Users Endpoints (Admin)
@@ -46,7 +47,9 @@ export const usersApi = {
   createUser: (userData) => api.post('/users', userData),
   updateUser: (id, userData) => api.put(`/users/${id}`, userData),
   deleteUser: (id) => api.delete(`/users/${id}`),
-  importCSV: (classId, students) => api.post('/users/import-csv', { classId, students }),
+  importCSV: (classId, students, initialPassword) =>
+    api.post('/users/import-csv', { classId, students, initialPassword }),
+  resetPassword: (id, data) => api.post(`/users/${id}/reset-password`, data),
 };
 
 // Classes Endpoints

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAttendance } from './context/AttendanceContext';
 import Sidebar from './components/Sidebar';
 import Login from './components/Login';
+import Modal from './components/common/Modal';
 
 // Admin Components
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -25,12 +26,23 @@ import MyAttendanceView from './components/student/MyAttendanceView';
 import StudentHistoryView from './components/student/StudentHistoryView';
 import StudentStatisticsView from './components/student/StudentStatisticsView';
 
-import { Menu, LogOut, Loader2 } from 'lucide-react';
+import { Menu, LogOut, Loader2, Key, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
-  const { currentUser, isLoading, login, logout } = useAttendance();
+  const { currentUser, isLoading, login, logout, changePassword } = useAttendance();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Change Password State
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordFeedback, setPasswordFeedback] = useState(null);
+  const [passwordError, setPasswordError] = useState(null);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
 
   if (isLoading) {
     return (
@@ -52,12 +64,41 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  const handleQuickSwitch = async (personaKey) => {
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordFeedback(null);
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+      setPasswordError('Please fill in all required fields');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters long');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New password and confirm password do not match');
+      return;
+    }
+
+    setIsSubmittingPassword(true);
     try {
-      await login(personaKey);
-      setActiveTab('dashboard');
+      const res = await changePassword(passwordForm);
+      setPasswordFeedback(res?.message || 'Password changed successfully!');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setPasswordFeedback(null);
+      }, 1500);
     } catch (err) {
-      console.error('Quick switch failed:', err);
+      setPasswordError(
+        err?.response?.data?.message || err?.message || 'Failed to update password'
+      );
+    } finally {
+      setIsSubmittingPassword(false);
     }
   };
 
@@ -70,6 +111,12 @@ export default function App() {
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
         onSignOut={handleSignOut}
+        onOpenChangePassword={() => {
+          setPasswordError(null);
+          setPasswordFeedback(null);
+          setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+          setIsChangePasswordOpen(true);
+        }}
       />
 
       <main className="w-full flex-1 p-6 md:p-10 max-w-7xl mx-auto">
@@ -95,13 +142,29 @@ export default function App() {
             </div>
           </div>
 
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
-          >
-            <LogOut className="w-4 h-4 text-slate-500" />
-            Sign Out
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setPasswordError(null);
+                setPasswordFeedback(null);
+                setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                setIsChangePasswordOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+              title="Change Account Password"
+            >
+              <Key className="w-4 h-4 text-slate-500" />
+              <span>Change Password</span>
+            </button>
+
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 text-slate-500" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </header>
 
         {/* Dynamic Content */}
@@ -141,42 +204,106 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating Discreet Persona Switcher */}
-      <div className="fixed bottom-4 right-4 z-40 bg-white/95 backdrop-blur-xs border border-slate-200 shadow-md p-1 rounded-xl flex items-center gap-1 text-xs">
-        <span className="px-2 text-slate-400 font-medium text-[11px]">Role Switch:</span>
-        <button
-          onClick={() => handleQuickSwitch('admin')}
-          className={`px-2 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
-            currentUser.role === 'admin' ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Admin
-        </button>
-        <button
-          onClick={() => handleQuickSwitch('teacherSharma')}
-          className={`px-2 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
-            currentUser.role === 'teacher' ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Teacher
-        </button>
-        <button
-          onClick={() => handleQuickSwitch('studentAlex')}
-          className={`px-2 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
-            currentUser.role === 'student' && currentUser.name?.includes('Alex') ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Student
-        </button>
-        <button
-          onClick={() => handleQuickSwitch('studentRohan')}
-          className={`px-2 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
-            currentUser.role === 'student' && currentUser.name?.includes('Rohan') ? 'bg-rose-50 text-rose-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Defaulter
-        </button>
-      </div>
+      {/* Change Password Modal */}
+      <Modal
+        isOpen={isChangePasswordOpen}
+        onClose={() => {
+          setIsChangePasswordOpen(false);
+          setPasswordError(null);
+          setPasswordFeedback(null);
+        }}
+        title="Change Password"
+      >
+        <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+          {passwordFeedback && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{passwordFeedback}</span>
+            </div>
+          )}
+
+          {passwordError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{passwordError}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Current Password *
+            </label>
+            <input
+              type="password"
+              required
+              value={passwordForm.currentPassword}
+              onChange={(e) =>
+                setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+              }
+              placeholder="Enter current password"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              New Password *
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={passwordForm.newPassword}
+              onChange={(e) =>
+                setPasswordForm({ ...passwordForm, newPassword: e.target.value })
+              }
+              placeholder="At least 6 characters"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Confirm New Password *
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={passwordForm.confirmPassword}
+              onChange={(e) =>
+                setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
+              }
+              placeholder="Confirm new password"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+            />
+          </div>
+
+          <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsChangePasswordOpen(false)}
+              className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmittingPassword}
+              className="px-4 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 rounded-lg flex items-center gap-1.5 cursor-pointer"
+            >
+              {isSubmittingPassword ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update Password'
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

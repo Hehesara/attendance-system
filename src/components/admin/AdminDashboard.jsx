@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAttendance } from '../../context/AttendanceContext';
-import { Settings, UserPlus, Trash2, Users } from 'lucide-react';
+import { Settings, Trash2, Users } from 'lucide-react';
 
 export default function AdminDashboard({ setActiveTab }) {
   const {
@@ -9,47 +9,17 @@ export default function AdminDashboard({ setActiveTab }) {
     students,
     teachers,
     classes,
-    addStudent,
-    addTeacher,
     deleteStudent,
     deleteTeacher,
     getClassMetrics,
   } = useAttendance();
 
   const [threshold, setThreshold] = useState(settings.minimumThreshold || 75);
-  const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('Student');
 
   // Handle threshold change
   const handleThresholdChange = (val) => {
     setThreshold(val);
     updateSettings({ minimumThreshold: Number(val) || 75 });
-  };
-
-  // Handle Add User
-  const handleAddUser = (e) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
-
-    if (newRole === 'Student') {
-      const defaultClassId = classes[0]?.id || '';
-      addStudent({
-        rollNo: String(100 + students.length + 1),
-        name: newName.trim(),
-        email: `${newName.toLowerCase().replace(/\s+/g, '.')}@college.edu`,
-        classId: defaultClassId,
-        department: 'Information Technology',
-      });
-    } else {
-      addTeacher({
-        name: newName.trim(),
-        email: `${newName.toLowerCase().replace(/\s+/g, '.')}@college.edu`,
-        department: 'Information Technology',
-        designation: 'Assistant Professor',
-      });
-    }
-
-    setNewName('');
   };
 
   // Combined system users list for the System Users card
@@ -72,7 +42,7 @@ export default function AdminDashboard({ setActiveTab }) {
 
   return (
     <div className="space-y-6">
-      {/* 1. Attendance Minimum Threshold Card (Exact Reference Screenshot Style) */}
+      {/* 1. Attendance Minimum Threshold Card */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Settings className="w-6 h-6 text-indigo-600" />
@@ -94,39 +64,7 @@ export default function AdminDashboard({ setActiveTab }) {
         </div>
       </div>
 
-      {/* 2. Add New User Card (Exact Reference Screenshot Style) */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-        <div className="flex items-center gap-2">
-          <UserPlus className="w-5 h-5 text-indigo-600" />
-          <h3 className="font-bold text-slate-900 text-base">Add New User</h3>
-        </div>
-
-        <form onSubmit={handleAddUser} className="flex flex-wrap sm:flex-nowrap gap-3 items-center">
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-slate-50/50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-          />
-          <select
-            value={newRole}
-            onChange={(e) => setNewRole(e.target.value)}
-            className="border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-white text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="Student">Student</option>
-            <option value="Teacher">Teacher</option>
-          </select>
-          <button
-            type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition-colors shrink-0 shadow-xs cursor-pointer"
-          >
-            Add User
-          </button>
-        </form>
-      </div>
-
-      {/* 3. System Users Card (Exact Reference Screenshot Style) */}
+      {/* 2. System Users Card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-6 pt-5 pb-3">
           <h3 className="font-bold text-slate-900 text-base">System Users</h3>

@@ -5,7 +5,7 @@ import { CheckCircle, AlertTriangle } from 'lucide-react';
 export default function StudentDashboard({ setActiveTab }) {
   const { currentUser, getStudentMetrics } = useAttendance();
 
-  const studentId = currentUser?.id || 'stu-101';
+  const studentId = currentUser?.id || currentUser?._id;
   const metrics = getStudentMetrics(studentId);
 
   if (!metrics) {

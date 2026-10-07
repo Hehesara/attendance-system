@@ -6,7 +6,7 @@ import { Users } from 'lucide-react';
 export default function MyClassesView({ setActiveTab }) {
   const { currentUser, getTeacherData, students } = useAttendance();
 
-  const teacherId = currentUser?.id || 'tea-sharma';
+  const teacherId = currentUser?.id || currentUser?._id;
   const teacherData = getTeacherData(teacherId);
 
   const [inspectClass, setInspectClass] = useState(null);
@@ -28,10 +28,20 @@ export default function MyClassesView({ setActiveTab }) {
       {/* Class Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {assignedClasses.map((cls) => {
-          const classStudents = students.filter((s) => s.classId === cls.id);
+          const clsId = String(cls.id || cls._id || '');
+          const classStudents = students.filter((s) => {
+            const sClsId = String(s.classId?._id || s.classId?.id || s.classId || '');
+            return sClsId === clsId;
+          });
           const taughtSubjects = teacherAssignments
-            .filter((a) => a.classId === cls.id)
-            .map((a) => assignedSubjects.find((s) => s.id === a.subjectId))
+            .filter((a) => {
+              const aClsId = String(a.classId?._id || a.classId?.id || a.classId || '');
+              return aClsId === clsId;
+            })
+            .map((a) => {
+              const aSubId = String(a.subjectId?._id || a.subjectId?.id || a.subjectId || '');
+              return assignedSubjects.find((s) => String(s.id || s._id) === aSubId);
+            })
             .filter(Boolean);
 
           return (
@@ -108,7 +118,11 @@ export default function MyClassesView({ setActiveTab }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {students
-                  .filter((s) => s.classId === inspectClass.id)
+                  .filter((s) => {
+                    const sClsId = String(s.classId?._id || s.classId?.id || s.classId || '');
+                    const iClsId = String(inspectClass?.id || inspectClass?._id || '');
+                    return sClsId === iClsId;
+                  })
                   .sort((a, b) => Number(a.rollNo) - Number(b.rollNo))
                   .map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50/50">

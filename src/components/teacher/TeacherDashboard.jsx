@@ -5,7 +5,7 @@ import { UserCheck, ArrowRight } from 'lucide-react';
 export default function TeacherDashboard({ setActiveTab }) {
   const { currentUser, getTeacherData, students, getStudentMetrics, settings } = useAttendance();
 
-  const teacherId = currentUser?.id || 'tea-sharma';
+  const teacherId = currentUser?.id || currentUser?._id;
   const teacherData = getTeacherData(teacherId);
 
   if (!teacherData) {
@@ -15,9 +15,10 @@ export default function TeacherDashboard({ setActiveTab }) {
   const { assignedClasses, assignedSubjects, teacherAssignments, teacherSessions } = teacherData;
   const threshold = settings.minimumThreshold || 75;
 
-  const enrolledStudents = students.filter((s) =>
-    assignedClasses.some((c) => c.id === s.classId)
-  );
+  const enrolledStudents = students.filter((s) => {
+    const sClsId = String(s.classId?._id || s.classId?.id || s.classId || '');
+    return assignedClasses.some((c) => String(c.id || c._id) === sClsId);
+  });
 
   const defaulterCount = enrolledStudents.filter((st) => {
     const m = getStudentMetrics(st.id);
@@ -80,9 +81,14 @@ export default function TeacherDashboard({ setActiveTab }) {
 
           <div className="divide-y divide-slate-100">
             {teacherAssignments.map((asg) => {
-              const cls = assignedClasses.find((c) => c.id === asg.classId);
-              const sub = assignedSubjects.find((s) => s.id === asg.subjectId);
-              const classCount = students.filter((s) => s.classId === asg.classId).length;
+              const aClsId = String(asg.classId?._id || asg.classId?.id || asg.classId || '');
+              const aSubId = String(asg.subjectId?._id || asg.subjectId?.id || asg.subjectId || '');
+              const cls = assignedClasses.find((c) => String(c.id || c._id) === aClsId);
+              const sub = assignedSubjects.find((s) => String(s.id || s._id) === aSubId);
+              const classCount = students.filter((s) => {
+                const sClsId = String(s.classId?._id || s.classId?.id || s.classId || '');
+                return sClsId === aClsId;
+              }).length;
 
               return (
                 <div key={asg.id} className="p-4 flex items-center justify-between hover:bg-slate-50/50">

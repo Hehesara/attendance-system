@@ -13,7 +13,7 @@ export default function MarkAttendanceView() {
     settings,
   } = useAttendance();
 
-  const teacherId = currentUser?.id || 'tea-sharma';
+  const teacherId = currentUser?.id || currentUser?._id;
   const teacherData = getTeacherData(teacherId);
 
   const assignedClasses = teacherData?.assignedClasses || [];
@@ -30,14 +30,20 @@ export default function MarkAttendanceView() {
 
   // Available subjects for selected class taught by this teacher
   const availableSubjectsForClass = teacherAssignments
-    .filter((a) => a.classId === selectedClassId)
-    .map((a) => assignedSubjects.find((s) => s.id === a.subjectId))
+    .filter((a) => {
+      const aClsId = String(a.classId?._id || a.classId?.id || a.classId || '');
+      return aClsId === String(selectedClassId);
+    })
+    .map((a) => {
+      const aSubId = String(a.subjectId?._id || a.subjectId?.id || a.subjectId || '');
+      return assignedSubjects.find((s) => String(s.id || s._id) === aSubId);
+    })
     .filter(Boolean);
 
   useEffect(() => {
     if (availableSubjectsForClass.length > 0) {
-      if (!availableSubjectsForClass.some((s) => s.id === selectedSubjectId)) {
-        setSelectedSubjectId(availableSubjectsForClass[0].id);
+      if (!availableSubjectsForClass.some((s) => String(s.id || s._id) === String(selectedSubjectId))) {
+        setSelectedSubjectId(availableSubjectsForClass[0].id || availableSubjectsForClass[0]._id);
       }
     } else {
       setSelectedSubjectId('');
@@ -48,13 +54,16 @@ export default function MarkAttendanceView() {
     if (!selectedClassId) return;
 
     const classStudents = students
-      .filter((s) => s.classId === selectedClassId)
+      .filter((s) => {
+        const sClsId = String(s.classId?._id || s.classId?.id || s.classId || '');
+        return sClsId === String(selectedClassId);
+      })
       .sort((a, b) => Number(a.rollNo) - Number(b.rollNo));
 
     const existingSession = attendanceSessions.find(
       (sess) =>
-        sess.classId === selectedClassId &&
-        sess.subjectId === selectedSubjectId &&
+        String(sess.classId?._id || sess.classId?.id || sess.classId || '') === String(selectedClassId) &&
+        String(sess.subjectId?._id || sess.subjectId?.id || sess.subjectId || '') === String(selectedSubjectId) &&
         sess.date === date
     );
 

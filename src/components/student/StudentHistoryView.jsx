@@ -5,7 +5,7 @@ import { Filter } from 'lucide-react';
 export default function StudentHistoryView() {
   const { currentUser, getStudentMetrics } = useAttendance();
 
-  const studentId = currentUser?.id || 'stu-101';
+  const studentId = currentUser?.id || currentUser?._id;
   const metrics = getStudentMetrics(studentId);
 
   const [selectedSubject, setSelectedSubject] = useState('All');

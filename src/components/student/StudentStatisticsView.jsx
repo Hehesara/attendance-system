@@ -6,7 +6,7 @@ import { CheckCircle, AlertTriangle } from 'lucide-react';
 export default function StudentStatisticsView() {
   const { currentUser, getStudentMetrics, settings } = useAttendance();
 
-  const studentId = currentUser?.id || 'stu-101';
+  const studentId = currentUser?.id || currentUser?._id;
   const metrics = getStudentMetrics(studentId);
 
   const [simulatedSubjectId, setSimulatedSubjectId] = useState('');

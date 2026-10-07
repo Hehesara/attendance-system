@@ -27,7 +27,7 @@ const getUsers = async (req, res) => {
       role: u.role,
       department: u.department,
       rollNo: u.rollNo,
-      classId: u.classId?._id || u.classId,
+      classId: u.classId?._id ? String(u.classId._id) : (u.classId ? String(u.classId) : null),
       className: u.classId?.name,
       designation: u.designation,
       createdAt: u.createdAt,
@@ -65,20 +65,16 @@ const createUser = async (req, res) => {
       });
     }
 
-    // Determine default password if not provided
-    let rawPassword = password;
-    if (!rawPassword) {
-      if (role === 'student') {
-        rawPassword = rollNo ? String(rollNo).trim() : 'student123';
-      } else if (role === 'teacher') {
-        rawPassword = 'teacher123';
-      } else {
-        rawPassword = 'admin123';
-      }
+    // Initial password is required
+    if (!password || String(password).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Initial password is required (minimum 6 characters)',
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(rawPassword, salt);
+    const hashedPassword = await bcrypt.hash(String(password).trim(), salt);
 
     const newUser = await User.create({
       name: name.trim(),
@@ -125,7 +121,7 @@ const createUser = async (req, res) => {
 // @access  Private/Admin
 const importStudentsCSV = async (req, res) => {
   try {
-    const { classId, students } = req.body;
+    const { classId, students, initialPassword } = req.body;
 
     if (!classId) {
       return res.status(400).json({
@@ -141,7 +137,13 @@ const importStudentsCSV = async (req, res) => {
       });
     }
 
-    const salt = await bcrypt.genSalt(10);
+    if (!initialPassword || String(initialPassword).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Initial password for imported students is required (at least 6 characters)',
+      });
+    }
+
     const results = [];
     const errors = [];
 
@@ -158,8 +160,9 @@ const importStudentsCSV = async (req, res) => {
       }
 
       try {
-        // Default password = student roll number
-        const hashedPassword = await bcrypt.hash(rollNo, salt);
+        // Hash temporary password separately for each student
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(String(initialPassword).trim(), salt);
 
         // Check if student with this email exists
         let user = await User.findOne({ email });
@@ -170,6 +173,7 @@ const importStudentsCSV = async (req, res) => {
           user.rollNo = rollNo;
           user.classId = classId;
           user.role = 'student';
+          user.password = hashedPassword;
           await user.save();
           results.push(user);
         } else {
@@ -192,7 +196,7 @@ const importStudentsCSV = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: `Successfully imported ${results.length} students`,
+      message: `Successfully imported ${results.length} students. Students should change their password after their first login.`,
       importedCount: results.length,
       errors: errors.length > 0 ? errors : undefined,
     });
@@ -292,10 +296,48 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// @desc    Reset password for a user (teacher or student)
+// @route   POST /api/users/:id/reset-password
+// @access  Private/Admin
+const resetUserPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tempPass = req.body.temporaryPassword || req.body.newPassword;
+
+    if (!tempPass || String(tempPass).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Temporary password is required and must be at least 6 characters long',
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(String(tempPass).trim(), salt);
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully. Give the temporary password to the user securely.',
+    });
+  } catch (error) {
+    console.error('resetUserPassword error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Server error resetting password',
+    });
+  }
+};
+
 module.exports = {
   getUsers,
   createUser,
   importStudentsCSV,
   updateUser,
   deleteUser,
+  resetUserPassword,
 };

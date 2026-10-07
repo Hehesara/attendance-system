@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   LayoutDashboard,
   Layers,
@@ -13,9 +12,18 @@ import {
   Shield,
   LogOut,
   X,
+  Key,
 } from 'lucide-react';
 
-export default function Sidebar({ role, activeTab, setActiveTab, isOpen, setIsOpen, onSignOut }) {
+export default function Sidebar({
+  role,
+  activeTab,
+  setActiveTab,
+  isOpen,
+  setIsOpen,
+  onSignOut,
+  onOpenChangePassword,
+}) {
   const getLinks = () => {
     switch (role) {
       case 'admin':
@@ -112,11 +120,23 @@ export default function Sidebar({ role, activeTab, setActiveTab, isOpen, setIsOp
           </nav>
         </div>
 
-        {/* Footer / Sign Out */}
-        <div className="border-t border-slate-800 pt-4">
+        {/* Footer / Change Password & Sign Out */}
+        <div className="border-t border-slate-800 pt-3 space-y-1">
+          {onOpenChangePassword && (
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onOpenChangePassword();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-indigo-300 hover:bg-slate-800/60 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+            >
+              <Key className="w-4 h-4" />
+              Change Password
+            </button>
+          )}
           <button
             onClick={onSignOut}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+            className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 rounded-xl text-sm font-medium transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             Sign Out
